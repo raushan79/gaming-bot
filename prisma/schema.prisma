@@ -1,0 +1,17 @@
+generator client {
+  provider = "prisma-client-py"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model UpiScreenshotCounter {
+  id                Int    @id @default(autoincrement())
+  botName           String @map("bot_name")
+  screenshotCounter Int    @map("screenshot_counter")
+
+  @@map("upi_screenshot_counter")
+}
