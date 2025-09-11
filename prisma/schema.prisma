@@ -4,14 +4,29 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model UpiScreenshotCounter {
-  id                Int    @id @default(autoincrement())
-  botName           String @map("bot_name")
-  screenshotCounter Int    @map("screenshot_counter")
+model upi_screenshot_counter {
+  id                 Int      @id @default(autoincrement())
+  created_at         DateTime @default(now())
+  bot_name           String   @map("bot_name")
+  screenshot_counter Int      @map("screenshot_counter")
 
+  @@index([bot_name, screenshot_counter])
   @@map("upi_screenshot_counter")
+}
+
+model upi_id_table {
+  id         Int      @id @default(autoincrement())
+  created_at DateTime @default(now())
+  bot_name   String   @map("bot_name")
+  upi_id     String      @map("upi_id") @unique
+  counter    Int      @map("counter")
+
+  // create index on all fields
+  @@index([bot_name])
+  @@index([counter])
+  @@map("upi_id_table")
 }

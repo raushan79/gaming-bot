@@ -11,7 +11,10 @@ from selenium import webdriver
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from src.utility.logger import get_logger
-from src.db.sql_db import execute_query
+from src.utility.db import PostgresDB
+from src.utility.common import send_message, UNIQUE_GOOGLE_WEBHOOK_DAFABET, has_valid_upi_suffix, get_invalid_upi_ids,DATABASE_URL
+
+db = PostgresDB(url=DATABASE_URL)
 
 
 logger = get_logger(__name__, "dafabet.log")
@@ -28,7 +31,6 @@ AMOUNT_LIST = [1000, 5000, 10000, 15000, 50000, 80000]
 def start():
     logger.info("Dafabet bot started for get upi id")
     driver = connect_with_running_browser()
-    # go_to_url(driver, HOME_PAGE_URL)
     new_url_tab = open_url_in_new_tab(driver, HOME_PAGE_URL)
     time.sleep(2)
     deposite_url = extract_deposite_amount_url(driver)
@@ -54,17 +56,26 @@ def start():
     upi_id = extract_upi_ids(html_content)
     unique_upi_id = list(set(upi_id)) if upi_id else []
     logger.info(f"Extracted UPI IDs: {upi_id}")
-    get_counter_query = f"SELECT screenshot_counter FROM upi_screenshot_counter WHERE bot_name='dafabet' limit 1;"
-    counter = execute_query(db_path="prisma/database.db", query=get_counter_query)[0][0]
-    counter = counter + 1
-    update_counter_query = f"UPDATE upi_screenshot_counter SET screenshot_counter={counter} WHERE bot_name='dafabet';"
-    execute_query(db_path="prisma/database.db", query=update_counter_query)
-    # take screenshot and save with counter
-    driver.get_screenshot_as_file(f"upi_page_screenshot/upi_page_{counter}.png")
+    
     # execute_query
     if unique_upi_id:
-        message = f"{', '.join(unique_upi_id)}"
-        send_message(message, GOOGLE_WEBHOOK)
+        # check upi id if exist then get send with counter
+        check_existing_upi_query = f""" SELECT bot_name, upi_id, counter FROM upi_id_table WHERE upi_id= %s """
+        check_existing_upi_query_params = (unique_upi_id,)
+        existing_upi_id_details = db.execute(check_existing_upi_query, check_existing_upi_query_params)
+        print(f"existing_upi_id_details : {existing_upi_id_details}")
+        if not existing_upi_id_details:
+        # send upi id and insert in db
+            insert_upi_id_query = f""" INSERT INTO upi_id_table (bot_name, upi_id, counter) VALUES (%s, %s, %s) """
+            insert_upi_id_query_params = ('dafabet',unique_upi_id, 1)
+            db.execute(insert_upi_id_query, insert_upi_id_query_params)
+        
+            upi_ids = get_invalid_upi_ids(unique_upi_id)
+            if upi_ids:
+                message = f"{', '.join(upi_ids)}"
+                send_message(message, UNIQUE_GOOGLE_WEBHOOK_DAFABET)
+            else:
+                logger.info("No invalid UPI IDs found.")
     else:
         logger.info("No UPI IDs found on the page.")
     # close the tab
@@ -219,29 +230,7 @@ def extract_upi_ids(html_content):
     else:
         return False
     
-# GOOGLE_WEBHOOK="https://chat.googleapis.com/v1/spaces/AAQAOLGKt3w/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Q4ClsEVZ8sDXtIl80UJt_r-QlV9_zFnWz439H7Ou6os"
-GOOGLE_WEBHOOK="https://chat.googleapis.com/v1/spaces/AAQA1CVd6gs/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=3-uHzQfaLRqMQd5HIRYbM1HtZCMKCkXI5Ih0kO5a7Gg"
-def send_message(message, webhook_url="https://chat.googleapis.com/v1/spaces/AAQAOLGKt3w/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=Q4ClsEVZ8sDXtIl80UJt_r-QlV9_zFnWz439H7Ou6os"):
-    """
-    Sends a message to Google Chat using the provided webhook URL.
-    
-    Args:
-        webhook_url (str): The Google Chat webhook URL.
-        message (str): The message to be sent.
-    """
-    headers = {"Content-Type": "application/json; charset=UTF-8"}
-    payload = {
-        "text": message
-    }
 
-    try:
-        response = requests.post(webhook_url, headers=headers, data=json.dumps(payload))
-        if response.status_code == 200:
-            print("Message sent successfully.")
-        else:
-            print(f"Failed to send message. Status code: {response.status_code}, Response: {response.text}")
-    except requests.exceptions.RequestException as e:
-        print(f"An error occurred while sending message: {e}")
 
 
 
