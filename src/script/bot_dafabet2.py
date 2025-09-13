@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 from src.utility.logger import get_logger
 from src.utility.db import PostgresDB
-from src.utility.common import send_message, UNIQUE_GOOGLE_WEBHOOK_DAFABET, has_valid_upi_suffix, get_invalid_upi_ids,DATABASE_URL
+from src.utility.common import send_message, UNIQUE_GOOGLE_WEBHOOK_DAFABET, has_valid_upi_suffix, get_invalid_upi_ids,DATABASE_URL, GOOGLE_WEBHOOK
 
 db = PostgresDB(url=DATABASE_URL)
 
@@ -60,14 +60,15 @@ def start():
     # execute_query
     if unique_upi_id:
         # check upi id if exist then get send with counter
+        upi_id_string = f"{', '.join(unique_upi_id)}" if unique_upi_id else ""
         check_existing_upi_query = f""" SELECT bot_name, upi_id, counter FROM upi_id_table WHERE upi_id= %s """
-        check_existing_upi_query_params = (unique_upi_id,)
+        check_existing_upi_query_params = (upi_id_string,)
         existing_upi_id_details = db.execute(check_existing_upi_query, check_existing_upi_query_params)
         print(f"existing_upi_id_details : {existing_upi_id_details}")
         if not existing_upi_id_details:
         # send upi id and insert in db
             insert_upi_id_query = f""" INSERT INTO upi_id_table (bot_name, upi_id, counter) VALUES (%s, %s, %s) """
-            insert_upi_id_query_params = ('dafabet',unique_upi_id, 1)
+            insert_upi_id_query_params = ('dafabet',upi_id_string, 1)
             db.execute(insert_upi_id_query, insert_upi_id_query_params)
         
             upi_ids = get_invalid_upi_ids(unique_upi_id)
@@ -76,6 +77,8 @@ def start():
                 send_message(message, UNIQUE_GOOGLE_WEBHOOK_DAFABET)
             else:
                 logger.info("No invalid UPI IDs found.")
+        # sent all upi
+        send_message(upi_id_string, GOOGLE_WEBHOOK)
     else:
         logger.info("No UPI IDs found on the page.")
     # close the tab
